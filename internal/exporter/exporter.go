@@ -192,6 +192,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
 		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
 		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
+		podUID, _ := util.GetPodUIDByDeviceID(uuid)
 
 		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
@@ -209,7 +210,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 				continue
 			}
 
-			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid)
+			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid, podUID)
 		}
 	}
 }
@@ -315,7 +316,7 @@ func BuildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[QField]RFie
 
 func BuildMetricInfo(prefix string, rField RField) MetricInfo {
 	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField)
-	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid"}, nil)
+	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid", "pod_uid"}, nil)
 
 	return MetricInfo{
 		desc:            desc,
