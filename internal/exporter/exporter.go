@@ -81,6 +81,7 @@ func New(prefix string, nvidiaSmiCommand string, qFieldsRaw string, logger log.L
 	qFieldToMetricInfoMap := BuildQFieldToMetricInfoMap(prefix, qFieldToRFieldMap)
 
 	infoLabels := getLabels(requiredFields)
+	infoLabels = append(infoLabels, "pod_namespace", "pod_name", "pod_container")
 	exporter := GPUExporter{
 		prefix:                prefix,
 		nvidiaSmiCommand:      nvidiaSmiCommand,
@@ -186,17 +187,19 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 	}
 
 	for _, currentRow := range currentTable.Rows {
-		uuid := strings.TrimPrefix(strings.ToLower(currentRow.QFieldToCells[uuidQField].RawValue), "gpu-")
+		// GPU_ prefix is added to the UUID ;eg GPU-de4d33fd-81ea-e3bd-2d58-5dfa725fc619
+		gpuWithPrefix := currentRow.QFieldToCells[uuidQField].RawValue
+		uuid := strings.TrimPrefix(strings.ToLower(gpuWithPrefix), "gpu-")
 		name := currentRow.QFieldToCells[nameQField].RawValue
 		driverModelCurrent := currentRow.QFieldToCells[driverModelCurrentQField].RawValue
 		driverModelPending := currentRow.QFieldToCells[driverModelPendingQField].RawValue
 		vBiosVersion := currentRow.QFieldToCells[vBiosVersionQField].RawValue
 		driverVersion := currentRow.QFieldToCells[driverVersionQField].RawValue
-		podUID, _ := util.GetPodUIDByDeviceID(uuid)
-
+		//podUID, _ := util.GetPodUIDByDeviceID(uuid)
+		pod, _ := util.GetPodByID(gpuWithPrefix)
 		infoMetric := prometheus.MustNewConstMetric(e.gpuInfoDesc, prometheus.GaugeValue,
 			1, uuid, name, driverModelCurrent,
-			driverModelPending, vBiosVersion, driverVersion)
+			driverModelPending, vBiosVersion, driverVersion, pod.Namespace, pod.Name, pod.Container)
 		metricCh <- infoMetric
 
 		for _, currentCell := range currentRow.Cells {
@@ -210,7 +213,7 @@ func (e *GPUExporter) Collect(metricCh chan<- prometheus.Metric) {
 				continue
 			}
 
-			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid, podUID)
+			metricCh <- prometheus.MustNewConstMetric(metricInfo.desc, metricInfo.MType, num, uuid, pod.Namespace, pod.Name, pod.Container)
 		}
 	}
 }
@@ -316,7 +319,8 @@ func BuildQFieldToMetricInfoMap(prefix string, qFieldtoRFieldMap map[QField]RFie
 
 func BuildMetricInfo(prefix string, rField RField) MetricInfo {
 	fqName, multiplier := BuildFQNameAndMultiplier(prefix, rField)
-	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid", "pod_uid"}, nil)
+	//desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid", "pod_uid"}, nil)
+	desc := prometheus.NewDesc(fqName, string(rField), []string{"uuid", "pod_namespace", "pod_name", "pod_container"}, nil)
 
 	return MetricInfo{
 		desc:            desc,

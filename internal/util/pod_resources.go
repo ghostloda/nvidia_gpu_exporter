@@ -14,10 +14,19 @@ import (
 )
 
 var (
-	connectionTimeout  = 10 * time.Second
-	nvidiaResourceName = "nvidia.com/gpu"
-	kubeletSocketPath  = "/var/lib/kubelet/pod-resources/kubelet.sock"
+	connectionTimeout = 10 * time.Second
+	kubeletSocketPath = "/var/lib/kubelet/pod-resources/kubelet.sock"
 )
+
+func GetNvidiaResourceName() string {
+	//from env
+	nvidiaResourceName := os.Getenv("NVIDIA_RESOURCE_NAME")
+	if nvidiaResourceName == "" {
+		nvidiaResourceName = "nvidia.com/gpu"
+	}
+
+	return nvidiaResourceName
+}
 
 type PodInfo struct {
 	Name      string
@@ -93,6 +102,7 @@ func listPods(conn *grpc.ClientConn) (*podresourcesapi.ListPodResourcesResponse,
 }
 
 func toDeviceToPod(devicePods *podresourcesapi.ListPodResourcesResponse) map[string]PodInfo {
+	nvidiaResourceName := GetNvidiaResourceName()
 	deviceToPodMap := make(map[string]PodInfo)
 	for _, pod := range devicePods.GetPodResources() {
 		for _, container := range pod.GetContainers() {
@@ -111,9 +121,10 @@ func toDeviceToPod(devicePods *podresourcesapi.ListPodResourcesResponse) map[str
 					if strings.Contains(deviceID, "::") {
 						gpuInstanceID := strings.Split(deviceID, "::")[0]
 						deviceToPodMap[gpuInstanceID] = podInfo
+					} else {
+						// Default mapping between deviceID and pod information
+						deviceToPodMap[deviceID] = podInfo
 					}
-					// Default mapping between deviceID and pod information
-					deviceToPodMap[deviceID] = podInfo
 				}
 			}
 		}
